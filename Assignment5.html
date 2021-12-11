@@ -1,0 +1,358 @@
+<html>
+
+<head>
+  <script src="d3.v7.min.js"></script>
+  <script src="d3-collection.v1.min.js"></script>
+  <style>
+    body {
+      box-sizing: border-box;
+      margin: 0;
+    }
+
+    .container {
+      min-width: 1000px;
+      height: 100%;
+      display: flex;
+      flex-wrap: wrap;
+      align-content: center;
+      justify-content: center;
+      align-items: center;
+    }
+
+    h1 {
+      color: #004b4b;
+      width: 100%;
+      font-size: 3rem;
+      text-align: center;
+      margin: -20px 0 40px 0;
+    }
+
+    #games {
+      width: 700px;
+    }
+
+    .info {
+      height: 600px;
+      width: 300px;
+      display: flex;
+      flex-flow: column;
+      justify-content: space-between;
+    }
+
+    .info-content {
+      color: #026e6e;
+      padding-left: 20px;
+      font-size: 1.15em;
+      line-height: 1.5em;
+      transition: 500ms;
+      padding-left: 20px;
+      opacity: 1;
+    }
+
+    .info-content.hide {
+      padding-left: 100px;
+      opacity: 0;
+    }
+
+    .modal {
+      display: none;
+      /* Hidden by default */
+      position: fixed;
+      /* Stay in place */
+      z-index: 1;
+      /* Sit on top */
+      left: 0;
+      top: 0;
+      width: 100%;
+      /* Full width */
+      height: 100%;
+      /* Full height */
+      overflow: auto;
+      /* Enable scroll if needed */
+      background-color: rgb(0, 0, 0);
+      /* Fallback color */
+      background-color: rgba(0, 0, 0, 0.4);
+      /* Black w/ opacity */
+    }
+
+    .modal-content {
+      color: #444;
+      background-color: #fefefe;
+      margin: 15% auto;
+      padding: 20px 40px;
+      border: 1px solid #888;
+      width: 700px;
+      min-height: 400px;
+    }
+
+    a,
+    span {
+      color: #026e6e;
+    }
+
+    .close {
+      color: #aaa;
+      float: right;
+      font-size: 28px;
+      font-weight: bold;
+    }
+
+    .close:hover,
+    .close:focus {
+      color: black;
+      text-decoration: none;
+      cursor: pointer;
+    }
+
+    h2 {
+      color: #004b4b;
+      padding-left: 10px;
+      padding-bottom: 15px;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="myModal" class="modal" style="display: block;">
+    <div class="modal-content">
+      <span class="close">&times;</span>
+      <h2>Final Project - You-Sheng Huang</h2>
+      <p>Appearance: use of color palettes suggested by:
+        <a target="_blank" href="https://www.crazyegg.com/blog/website-color-palettes/">
+          Website Color Palettes
+        </a>
+      </p>
+      <p>
+        Use of <span>d3.geoPath</span>, <span>d3.hierarchy</span>, and <span>d3.tree</span>
+      </p>
+      <p>Data source:
+        <a target="_blank" href="https://gitlab.com/djh_or/2018-world-cup-stats/blob/master/world_cup_2018_stats.csv">
+          https://gitlab.com/djh_or/2018-world-cup-stats/blob/master/world_cup_2018_stats.csv
+        </a>
+      </p>
+      <p>
+        Interaction with the data using <span>d3.hierarchy</span>
+      </p>
+      <p>
+        Use of a <span>Match Chart</span> (not seen in the class) to show the game details.
+      </p>
+      <p>
+        Use of a <span>Map Graph</span> to show contry locations of the teams.
+      </p>
+      <p>
+        Interactivity: Match Chart <span>zoom</span>
+      </p>
+      <p>
+        Interactivity: Match Chart <span>mouseover</span> and show detailed game information
+      </p>
+      <p>
+        <span>Transitions</span> for toggling game information panel (when mouseenter / mouseleave)
+      </p>
+    </div>
+  </div>
+
+  <div class="container">
+    <h1>2018 World Cup</h1>
+    <svg id="games"></svg>
+    <div class="info">
+      <div class="info-content hide">
+      </div>
+      <svg id="map" width="300px" height="210px"></svg>
+    </div>
+  </div>
+
+  <script>
+    let width = 800;
+    let height = 600;
+    document.querySelector("#games").setAttribute("width", width + "px")
+    document.querySelector("#games").setAttribute("height", height + "px")
+
+    Promise.all([d3.csv("world_cup_2018_stats.csv"), d3.json("world.geojson")])
+      .then(([data, countries]) => {
+        var root = d3.nest()
+          .key(d => d.Team)
+          .entries(data);
+
+        var geoPath = d3.geoPath().projection(d3.geoMercator()
+          .scale(48)
+          .translate([150, 150]));
+        d3.select("#map")
+          .selectAll("path")
+          .data(countries.features)
+          .enter()
+          .append("path")
+          .attr("d", geoPath)
+        updateMap()
+
+        let firstPlace;
+        let thirdPlace;
+        data.reverse().forEach(e => {
+          e.children = [];
+          let parent = findParent(e, firstPlace) || findParent(e, thirdPlace)
+          if (parent) {
+            parent.children.push(e)
+          }
+          else if (e.Game == "firstPlace") {
+            firstPlace = e;
+          }
+          else {
+            thirdPlace = e;
+          }
+        })
+
+        function findParent(e, p) {
+          if (p == null) return null;
+          if (Number(e.Round) + 1 == p.Round && (e.Team == p.Team || e.Opponent == p.Team)) return p;
+          for (let i = 0; i < p.children.length; i++) {
+            let parent = findParent(e, p.children[i])
+            if (parent) return parent;
+          }
+        }
+
+        width -= 300;
+        root = d3.hierarchy(firstPlace);
+        var treeChart = d3.tree()
+          .size([height, width]);
+        var treeData = treeChart(root).descendants().reverse()
+
+        d3.select('#games')
+          .append("g")
+          .attr("id", 'zoom')
+          .append("g")
+          .attr("id", 'treeG')
+          .attr("transform", "translate(100, 0)")
+          .selectAll("g")
+          .data(treeData)
+          .enter()
+          .append("g")
+          .attr("class", 'node')
+
+        const lostStrokeWidth = 2;
+        const strokeWidth = 8;
+        let lines = d3.select('#treeG')
+          .selectAll("line")
+          .data(treeData.filter(d => d.parent))
+          .enter()
+        lines
+          .append("line")
+          .style("stroke", "#aaa")
+          .style("stroke-width", d => (d.data.WDL == "W") ? strokeWidth : lostStrokeWidth)
+          .attr("class", d => `l-${d.data.Game} ${d.data.WDL}`)
+          .attr("x1", d => getLtrX(d.parent.y))
+          .attr("y1", d => d.parent.x)
+          .attr("x2", d => getLtrX(d.parent.y))
+          .attr("y2", d => d.x)
+          .on("mouseover", showDeatils)
+          .on("mouseleave", hideDeatils)
+        lines
+          .append("line")
+          .style("stroke", "#aaa")
+          .style("stroke-width", d => (d.data.WDL == "W") ? strokeWidth : lostStrokeWidth)
+          .attr("class", d => `l-${d.data.Game} ${d.data.WDL}`)
+          .attr("x1", d => getLtrX(d.parent.y - ((d.data.WDL == "W") ? (strokeWidth / 2) : 0)))
+          .attr("y1", d => d.x)
+          .attr("x2", d => getLtrX(d.y) - strokeWidth / 2)
+          .attr("y2", d => d.x)
+          .on("mouseenter", showDeatils)
+          .on("mouseleave", hideDeatils)
+        function showDeatils(e) {
+          let d = e.target.__data__;
+          document.querySelectorAll(`.l-${d.data.Game}.W`).forEach(e => {
+            e.style.stroke = "#fe7860"
+          })
+          document.querySelectorAll(`.l-${d.data.Game}.L`).forEach(e => {
+            e.style.stroke = "#506cf0"
+          })
+          updateMap(d);
+          let { Game, Round, Team, Opponent, "Home/Away": HomeAway, Score, WDL, "Goals For": GoalsFor, "Goals Against": GoalsAgainst, Attempts, "On-Target": OnTarget, "Off-Target": OffTarget, Blocked } = d.data;
+          if (Round == 5) {
+            Round = 4;
+            Score = "4-2";
+          }
+          let info = { Game, Round, Team, Opponent, HomeAway, Score, WDL, GoalsFor, GoalsAgainst, Attempts, OnTarget, OffTarget, Blocked }
+          let html = "";
+          Object.keys(info).forEach(k => {
+            if (k == "WDL") {
+              html += `Result: ${(info[k] == "W") ? "Win" : "Lose"}<br>`
+            }
+            else {
+              html += `${k}: ${info[k] || 'N/A'}<br>`
+            }
+          })
+          document.querySelector(".info-content").innerHTML = html
+          document.querySelector(".info-content").classList.remove("hide")
+        }
+        function hideDeatils(e) {
+          let d = e.target.__data__;
+          document.querySelectorAll(`.l-${d.data.Game}`).forEach(e => {
+            e.style.stroke = "#aaa"
+          })
+          updateMap(null);
+          document.querySelector(".info-content").classList.add("hide")
+        }
+        function updateMap(d) {
+          d3.select("#map")
+            .selectAll("path")
+            .attr('fill', mapData => {
+              if (!d) return "#f3f3f3";
+              let win = (d.data.WDL == "W") ? d.data.Team : d.data.Opponent;
+              let lose = (d.data.WDL != "W") ? d.data.Team : d.data.Opponent;
+              return (mapData.properties.name == win) ? "#fe7860" :
+                (mapData.properties.name == lose) ? "#506cf0" : "#f3f3f3"
+            });
+        }
+
+        d3.select('#games')
+          .selectAll("g.node")
+          .data(treeData.filter(d => d.data.Round == 1))
+          .append("text")
+          .attr("transform", "translate(-10, 4)")
+          .attr("x", d => getLtrX(d.y))
+          .attr("y", d => d.x)
+          .attr("text-anchor", "end")
+          .text(d => d.data.Team);
+        d3.select('#games')
+          .selectAll("g.node")
+          .data(treeData.filter(d => d.data.Round == 5))
+          .append("text")
+          .attr("transform", "translate(110, 4)")
+          .attr("x", d => getLtrX(d.y))
+          .attr("y", d => d.x)
+          .attr("text-anchor", "start")
+          .text(d => d.data.Team);
+        d3.select('#games')
+          .selectAll("g.node")
+          .data(treeData.filter(d => d.data.Round != 1))
+          .append("text")
+          .attr("transform", "translate(8, -10)")
+          .attr("x", d => getLtrX(d.y))
+          .attr("y", d => d.x)
+          .attr("text-anchor", "start")
+          .text(d => d.children[0].data.Score);
+
+        function getLtrX(x) {
+          return width - x;
+        }
+
+        var treeZoom = d3.zoom().on("zoom", function (e) {
+          d3.select('#zoom').attr("transform", e.transform)
+        })
+        d3.select('svg')
+          .call(treeZoom)
+      })
+
+    var modal = document.getElementById("myModal");
+    var span = document.getElementsByClassName("close")[0];
+    span.onclick = function () {
+      modal.style.display = "none";
+    }
+    window.onclick = function (event) {
+      if (event.target == modal) {
+        modal.style.display = "none";
+      }
+    }
+
+  </script>
+</body>
+
+</html>
